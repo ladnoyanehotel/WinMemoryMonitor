@@ -1,0 +1,6 @@
+src/packages/
+src/bin/
+src/obj/
+src/Worker/bin/
+src/Worker/obj/
+TestResults.xml

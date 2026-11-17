@@ -1,0 +1,252 @@
+﻿using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Globalization;
+using System.IO;
+using System.Linq;
+using System.Reflection;
+using System.Runtime.Serialization.Json;
+
+namespace WinMemoryCleaner
+{
+    /// <summary>
+    /// Localizer
+    /// </summary>
+    public static class Localizer
+    {
+        #region Events
+
+        /// <summary>
+        /// Occurs when [static property changed].
+        /// </summary>
+        public static event PropertyChangedEventHandler StaticPropertyChanged;
+
+        #endregion
+
+        #region Fields
+
+        private static CultureInfo _culture;
+        private static Language _language;
+        private static List<Language> _languages;
+
+        #endregion
+
+        #region Constructors
+
+        static Localizer()
+        {
+            String = new Localization();
+
+            try
+            {
+                Culture = new CultureInfo(Settings.Language);
+            }
+            catch
+            {
+                Culture = new CultureInfo(Constants.Windows.Locale.Name.English);
+            }
+
+            Language = new Language(Culture);
+        }
+
+        #endregion
+
+        #region Properties
+
+        /// <summary>
+        /// Gets the culture.
+        /// </summary>
+        /// <value>
+        /// The culture.
+        /// </value>
+        public static CultureInfo Culture
+        {
+            get { return _culture; }
+            private set
+            {
+                _culture = value;
+                RaiseStaticPropertyChanged();
+            }
+        }
+
+        /// <summary>
+        /// Gets or sets the language.
+        /// </summary>
+        /// <value>
+        /// The language.
+        /// </value>
+        public static Language Language
+        {
+            get { return _language; }
+            set
+            {
+                if (_language != null && _language.Equals(value))
+                    return;
+
+                try
+                {
+                    if (value == null)
+                        throw new ArgumentNullException("value");
+
+                    Load(value);
+
+                    Settings.Language = value.Name;
+                    Settings.Save();
+                }
+                catch
+                {
+                    Settings.Language = Constants.Windows.Locale.Name.English;
+                    Settings.Save();
+
+                    throw;
+                }
+
+                _language = value;
+
+                RaiseStaticPropertyChanged(string.Empty);
+
+                App.ReleaseMemory();
+            }
+        }
+
+        /// <summary>
+        /// Gets the languages.
+        /// </summary>
+        /// <value>
+        /// The languages.
+        /// </value>
+        public static List<Language> Languages
+        {
+            get
+            {
+                if (_languages != null)
+                    return _languages;
+
+                try
+                {
+                    var resourceNames = Assembly.GetExecutingAssembly().GetManifestResourceNames()
+                        .Where(file => file.StartsWith(Constants.App.LocalizationResourcePath, StringComparison.OrdinalIgnoreCase) && file.EndsWith(Constants.App.EmbeddedResourcePathExtension, StringComparison.OrdinalIgnoreCase))
+                        .Select(file => file.Replace(Constants.App.LocalizationResourcePath, string.Empty).Replace(Constants.App.EmbeddedResourcePathExtension, string.Empty))
+                        .OrderBy(file => file)
+                        .ToList();
+
+                    try
+                    {
+                        var localResources = Directory.GetFiles(AppDomain.CurrentDomain.BaseDirectory, string.Format(Culture, "*{0}", Constants.App.EmbeddedResourcePathExtension), SearchOption.TopDirectoryOnly)
+                            .Select(Path.GetFileNameWithoutExtension)
+                            .ToList();
+
+                        if (localResources.Any())
+                            resourceNames.AddRange(localResources);
+                    }
+                    catch
+                    {
+                        // ignored
+                    }
+
+                    _languages = CultureInfo.GetCultures(CultureTypes.AllCultures)
+                        .Where(culture => resourceNames.Contains(culture.EnglishName, StringComparer.OrdinalIgnoreCase))
+                        .OrderBy(culture => culture.EnglishName, StringComparer.InvariantCultureIgnoreCase)
+                        .Select(culture => new Language(culture))
+                        .ToList();
+                }
+                catch (Exception e)
+                {
+                    Logger.Error(e);
+
+                    _languages = new List<Language> { new Language(new CultureInfo(Constants.Windows.Locale.Name.English)) };
+                }
+
+                return _languages;
+            }
+        }
+
+        /// <summary>
+        /// Gets the string
+        /// </summary>
+        public static Localization String { get; private set; }
+
+        #endregion
+
+        #region Methods
+
+        /// <summary>
+        /// Determines whether a localization exists for the culture name (e.g. "en", "ru")
+        /// </summary>
+        public static bool LanguageExists(string cultureName)
+        {
+            return Languages.Any(language => string.Equals(language.Name, cultureName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private static void Load(Language language)
+        {
+            Localization localization;
+
+            var localResource = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, string.Format(Culture, "{0}{1}", language.EnglishName, Constants.App.EmbeddedResourcePathExtension));
+            var resource = string.Format(Culture, "{0}{1}{2}", Constants.App.LocalizationResourcePath, language.EnglishName, Constants.App.EmbeddedResourcePathExtension);
+
+            using (var stream = File.Exists(localResource) ? File.OpenRead(localResource) : Assembly.GetExecutingAssembly().GetManifestResourceStream(resource))
+            {
+                try
+                {
+                    if (stream == null)
+                        throw new NullReferenceException();
+
+                    var serializer = new DataContractJsonSerializer(typeof(Localization));
+
+                    localization = (Localization)serializer.ReadObject(stream);
+                }
+                catch
+                {
+                    throw new Exception(string.Format(Culture, "The {0} language file is missing or invalid.", language.EnglishName));
+                }
+            }
+
+            // Translations may lag behind newly added UI strings: instead of failing, missing
+            // values fall back to English so a partially translated file can never crash startup.
+            var english = LoadResource(new Language(new CultureInfo(Constants.Windows.Locale.Name.English)));
+            var changed = false;
+
+            foreach (var property in localization.GetType().GetProperties().Where(pi => pi.PropertyType == typeof(string)))
+            {
+                var value = (string)property.GetValue(localization, null);
+
+                if (string.IsNullOrWhiteSpace(value))
+                {
+                    property.SetValue(localization, property.GetValue(english, null), null);
+                    changed = true;
+                }
+            }
+
+            if (changed)
+                Logger.Information(string.Format(Culture, "The {0} language file is incomplete; missing values fall back to English.", language.EnglishName));
+
+            Culture = new CultureInfo(language.Name);
+            String = localization;
+        }
+
+        private static Localization LoadResource(Language language)
+        {
+            var localResource = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, string.Format(Culture, "{0}{1}", language.EnglishName, Constants.App.EmbeddedResourcePathExtension));
+            var resource = string.Format(Culture, "{0}{1}{2}", Constants.App.LocalizationResourcePath, language.EnglishName, Constants.App.EmbeddedResourcePathExtension);
+
+            using (var stream = File.Exists(localResource) ? File.OpenRead(localResource) : Assembly.GetExecutingAssembly().GetManifestResourceStream(resource))
+            {
+                if (stream == null)
+                    throw new NullReferenceException();
+
+                var serializer = new DataContractJsonSerializer(typeof(Localization));
+
+                return (Localization)serializer.ReadObject(stream);
+            }
+        }
+
+        private static void RaiseStaticPropertyChanged(string propertyName = null)
+        {
+            if (StaticPropertyChanged != null)
+                StaticPropertyChanged.Invoke(null, new PropertyChangedEventArgs(propertyName));
+        }
+
+        #endregion
+    }
+}

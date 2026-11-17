@@ -1,0 +1,58 @@
+<local:View x:Class="WinMemoryCleaner.SettingsWindow"
+            xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            xmlns:local="clr-namespace:WinMemoryCleaner"
+            Title="{Binding Path=(local:Localizer.String).Settings}"
+            Width="380" Height="Auto" SizeToContent="Height"
+            WindowStyle="None" ResizeMode="NoResize" ShowInTaskbar="False" WindowStartupLocation="CenterOwner"
+            Background="Transparent" AllowsTransparency="True"
+            FlowDirection="{Binding Path=(local:Localizer.Language).Direction}"
+            Foreground="{DynamicResource SecondaryForeground}">
+    <Border Background="{DynamicResource PrimaryBackground}" BorderBrush="{DynamicResource PrimaryBorder}" BorderThickness="1" CornerRadius="8" Margin="1" Padding="14, 10, 14, 14">
+        <StackPanel>
+            <!-- Header -->
+            <Grid Margin="0, 0, 0, 10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Path=(local:Localizer.String).Settings}" FontSize="15" VerticalAlignment="Center" />
+                <Button Grid.Column="1" Click="OnCloseButtonClick" Width="24" Height="20" Content="&#10005;" FontSize="10" />
+            </Grid>
+
+            <!-- Language -->
+            <Grid Margin="0, 0, 0, 6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding Path=(local:Localizer.String).Language}" VerticalAlignment="Center" />
+                <ComboBox Grid.Column="1" Width="160" ItemsSource="{Binding Languages}" SelectedItem="{Binding Language}" DisplayMemberPath="EnglishName" />
+            </Grid>
+
+            <Separator Background="{DynamicResource PrimaryBorder}" Margin="0, 4, 0, 8" />
+
+            <!-- Simple settings -->
+            <CheckBox Content="{Binding Path=(local:Localizer.String).RunOnStartup}" IsChecked="{Binding RunOnStartup}" Margin="0, 3" />
+            <CheckBox Content="{Binding Path=(local:Localizer.String).StartMinimized}" IsChecked="{Binding StartMinimized}" Margin="0, 3" />
+            <CheckBox Content="{Binding Path=(local:Localizer.String).CloseToTheNotificationArea}" IsChecked="{Binding CloseToTheNotificationArea}" Margin="0, 3" />
+            <CheckBox Content="{Binding Path=(local:Localizer.String).Notifications}" IsChecked="{Binding Notifications}" Margin="0, 3" />
+            <CheckBox Content="{Binding Path=(local:Localizer.String).CloseAfterOptimization}" IsChecked="{Binding CloseAfterOptimization}" Margin="0, 3" />
+            <CheckBox Content="{Binding Path=(local:Localizer.String).AlwaysOnTop}" IsChecked="{Binding AlwaysOnTop}" Margin="0, 3" />
+
+            <!-- Advanced: hotkey -->
+            <Separator Background="{DynamicResource PrimaryBorder}" Margin="0, 8, 0, 8" />
+            <StackPanel>
+                <CheckBox Content="{Binding Path=(local:Localizer.String).OptimizationHotkey}" IsChecked="{Binding UseHotkey}" Margin="0, 3" />
+                <Grid Margin="16, 4, 0, 0" Visibility="{Binding UseHotkey, Converter={StaticResource BooleanToVisibilityConverter}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox Grid.Column="0" ItemsSource="{Binding Modifiers}" SelectedValue="{Binding OptimizationModifiers}" DisplayMemberPath="Value" SelectedValuePath="Key" Margin="0, 0, 6, 0" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Keys}" SelectedItem="{Binding OptimizationKey}" Width="90" />
+                </Grid>
+            </StackPanel>
+        </StackPanel>
+    </Border>
+</local:View>
